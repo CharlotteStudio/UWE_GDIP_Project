@@ -1,14 +1,14 @@
 #include "AL5DRobotArm_Header.h"
 
 String str = "";
-int size = 7;
+int size = 9;
 
 void setup() {
   Serial.begin(115200);
 
   InitAL5D();
 
-  Serial.println("You can input command now (such as 0,20,0,0,0,0,1000)");
+  Serial.println("You can input command now (such as 0,20,0,0,0,0,0,1000)");
 }
 
 void loop() {
@@ -27,7 +27,9 @@ void loop() {
     action.point_3 = StringToInt(strings[3]);
     action.point_4 = StringToInt(strings[4]);
     action.point_5 = StringToInt(strings[5]);
-    action.time    = StringToInt(strings[6]);
+    action.point_6 = StringToInt(strings[6]);
+    action.point_7 = StringToInt(strings[7]);
+    action.time    = StringToInt(strings[8]);
 
     SendoutMoverData(action);
   }
