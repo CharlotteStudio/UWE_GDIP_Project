@@ -3,14 +3,12 @@
 String str = "";
 int size = 7;
 
-AL5DMover catchAction;
-
-bool isCatched = false;
-
 void setup() {
   Serial.begin(115200);
 
   InitAL5D();
+
+  Serial.println("You can input command now (such as 0,20,0,0,0,0,1000)");
 }
 
 void loop() {
