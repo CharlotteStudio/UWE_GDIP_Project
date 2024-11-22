@@ -1,4 +1,4 @@
-  /*  
+/*  
  * Compatible ESP32 & ESP8266
  *
  * Need Download Library :
@@ -49,9 +49,7 @@ void InitAL5D(){
   Serial_AL5D.println("\r\nAL BL CL DL EL FL ");
 }
 
-void SendoutMoverData(AL5DMover mover){
-  if (millis() < nextTime) return;
-
+String GetMoverCommand(AL5DMover mover){
   mover.point_0   = CheckRotateValue(mover.point_0);
   mover.point_1   = CheckRotateValue(mover.point_1);
   mover.point_2   = CheckRotateValue(mover.point_2);
@@ -83,6 +81,13 @@ void SendoutMoverData(AL5DMover mover){
   command += " T";
   command += mover.time;
   command += "\r\n";
+  return command;
+}
+
+void SendoutMoverData(AL5DMover mover){
+  if (millis() < nextTime) return;
+
+  String command = GetMoverCommand(mover);
 
   Serial_AL5D.println(command);
   Serial_AL5D.println("#1:0\r\nAL BL CL DL EL FL VG VH\r\n");

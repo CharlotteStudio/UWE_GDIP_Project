@@ -5,10 +5,15 @@ int size = 9;
 
 void setup() {
   Serial.begin(115200);
-
   InitAL5D();
-
-  Serial.println("You can input command now (such as 0,20,0,0,0,0,0,1000)");
+  
+  // #0 底座        數值少向左轉, 數值大向右轉
+  // #1 底座上      數值少向下彎(向前), 數值大向上彎(向後)
+  // #2 底座上上方  數值少向上彎, 數值大向下彎
+  // #3 夾腕上下轉  數值少向下彎, 數值大向上彎
+  // #4 夾          數值少向內夾, 數值大向外移
+  // #5 夾轉動      數值少向右轉, 數值大向左彎
+  Serial.println("You can input command now (such as 0,20,0,0,0,0,0,0,1000)");
 }
 
 void loop() {
