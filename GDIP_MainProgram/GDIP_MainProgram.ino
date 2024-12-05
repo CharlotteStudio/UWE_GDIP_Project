@@ -1,10 +1,19 @@
 #include "AL5DRoboticArmActionSetting_Header.h"
+#include "Button_Header.h"
+#include <LiquidCrystal_I2C.h>
+#include <Wire.h> 
 
-//#define rxPin 0 // 低電壓
-//#define txPin 2 // 會出高電壓
-const int relayPin = 3;
-const int TrigPin = 4;
-const int EchoPin = 5;
+//#define rxPin    0 // 低電壓
+//#define txPin    2 // 會出高電壓
+#define relayPin   3
+#define TrigPin    4
+#define EchoPin    5
+#define button_pin 7
+#define sda_pin    15
+#define scl_pin    16
+
+enum ActionState { Init, Ready, Start, Pause, Stop, Catching };
+ActionState actionState = Init;
 
 const int targetDistance = 5;
 
@@ -17,14 +26,34 @@ float collectTime = 200;
 int inCount  = 0;
 int outCount = 0;
 
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+
+void OnUpCallback() {
+  if (actionState == Ready)
+  {
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("Start Program");
+    actionState = Start;
+  }
+}
+
 void setup()
 {
   Serial.begin(115200);
   pinMode(TrigPin, OUTPUT);
   pinMode(EchoPin, INPUT);
   pinMode(relayPin, OUTPUT);
+  pinMode(button_pin, INPUT_PULLUP);
 
   digitalWrite(relayPin, LOW);
+  SetUpOnUpCallback(0, &OnUpCallback);
+
+  lcd.begin(sda_pin, scl_pin);
+  lcd.backlight();
+  lcd.clear();
+  lcd.print("Initialization");
+
   relayOn = false;
 
   SetupFlowAction();
@@ -32,10 +61,25 @@ void setup()
   delay(2000);
   SendoutMoverData(idleAction);
   delay(2000);
+
+  actionState = Ready;
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Put Button Start");
 }
 
 void loop()
 {
+  if (actionState == Init)  return;
+
+  CheckButtonOnClick(0, button_pin);
+
+  if (actionState == Ready) return;
+
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Conveyor Running");
+
   digitalWrite(TrigPin, LOW);
   delayMicroseconds(2);
   digitalWrite(TrigPin, HIGH);
@@ -61,11 +105,23 @@ void loop()
       if(relayOn){
         digitalWrite(relayPin, LOW);
         relayOn = false;
-        Serial.println("Stop Conveyor Belt.");
-        Serial.println("Start Catching Flow.");
+
+        lcd.clear();
+        lcd.setCursor(0, 0);
+        lcd.print("Stop Conveyor");
+        Serial.println("Stop Conveyor");
+        lcd.setCursor(0, 1);
+        lcd.print("Start Catching");
+        Serial.println("Start Catching");
 
         SendoutMoverData(catchAction_1);
         delay(2000);
+
+        lcd.clear();
+        lcd.setCursor(0, 0);
+        lcd.print("Robotic Arm");
+        lcd.setCursor(0, 1);
+        lcd.print("Start Moving");
 
         SendoutMoverData(catchAction_2);
         delay(2000);
@@ -73,14 +129,32 @@ void loop()
         SendoutMoverData(catchAction_3);
         delay(2000);
 
+        lcd.clear();
+        lcd.setCursor(0, 0);
+        lcd.print("Robotic Arm");
+        lcd.setCursor(0, 1);
+        lcd.print("Start Catch");
+
         SendoutMoverData(catchAction_4);
         delay(2000);
 
         SendoutMoverData(release_1_Action_1);
         delay(2000);
 
+        lcd.clear();
+        lcd.setCursor(0, 0);
+        lcd.print("Robotic Arm");
+        lcd.setCursor(0, 1);
+        lcd.print("Move To Box 1");
+
         SendoutMoverData(release_1_Action_2);
         delay(2000);
+
+        lcd.clear();
+        lcd.setCursor(0, 0);
+        lcd.print("Robotic Arm");
+        lcd.setCursor(0, 1);
+        lcd.print("End Catching");
 
         SendoutMoverData(idleAction);
         delay(2000);
@@ -89,7 +163,7 @@ void loop()
       if(!relayOn){
         digitalWrite(relayPin, HIGH);
         relayOn = true;
-        Serial.println("Start Conveyor Belt.");
+        Serial.println("Start Conveyor");
       }
     }
     inCount  = 0;
