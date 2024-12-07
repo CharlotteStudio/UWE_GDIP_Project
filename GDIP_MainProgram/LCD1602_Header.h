@@ -15,16 +15,24 @@ void Init_LCD1602(){
   lcd.backlight();
 }
 
+String GetLimitText(String s){
+  if (s.length() <= 16) return s;
+  return s.substring(0, 16);
+}
+
 void Print_LCD(String s){
   lcd.clear();
   lcd.setCursor(0, 0);
   lcd.print(s);
+  Serial.println(GetLimitText(s));
 }
 
 void Print_LCD(String s, String s2){
   lcd.clear();
   lcd.setCursor(0, 0);
-  lcd.print(s);
+  lcd.print(GetLimitText(s));
   lcd.setCursor(0, 1);
-  lcd.print(s2);
+  lcd.print(GetLimitText(s2));
+  Serial.println(s);
+  Serial.println(s2);
 }
