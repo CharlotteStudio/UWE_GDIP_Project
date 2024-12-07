@@ -23,8 +23,8 @@ String GetLimitText(String s){
 void Print_LCD(String s){
   lcd.clear();
   lcd.setCursor(0, 0);
-  lcd.print(s);
-  Serial.println(GetLimitText(s));
+  lcd.print(GetLimitText(s));
+  Serial.println(s);
 }
 
 void Print_LCD(String s, String s2){
