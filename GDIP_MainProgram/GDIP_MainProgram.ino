@@ -22,12 +22,13 @@ enum ActionState { Init, Ready, Start, Pause, Stop, StartCatch, Catched, Release
 ActionState actionState = Init;
 
 const int targetDistance = 5;
-const int fallDownThreshold = 3800; // empty is 4095, havve pressure is 2000~3000
+const int fallDownThreshold = 4000; // empty is 4095, havve pressure is 2000~3000
+const int forcePasueCount = 5;
 
 float nextCollectTime              = 0;
 const float collectTime            = 100;
 float nextCollectCatchTime         = 0;
-const float collectCatchTime       = 200;
+const float collectCatchTime       = 300;
 float conveyorTimeout              = 0;
 const float conveyorTimeoutWaiting = 10000;
 float onHoldButtonTime             = 0;
@@ -38,6 +39,7 @@ int inCount  = 0;
 int outCount = 0;
 int inCatchCount  = 0;
 int outCatchCount = 0;
+int noItemLoop = 0;
 
 bool relayOn = false;
 bool isCatchFail = false;
@@ -60,19 +62,27 @@ void OnUpCallback() {
 
 void OnDownCallback() { onHoldButtonTime = millis() + onHoldButtonWaiting; }
 
+void RestartAction(){
+  StartBuzzerLoop(2, 200, 50, 5);
+  Print_LCD("Stop Action","Reset System");
+  digitalWrite(relayPin, LOW);
+  relayOn = false;
+  actionState = Ready;
+  isCatchFail = false;
+  isFallDown  = false;
+  noItemLoop = 0;
+  SendoutMoverData(idleAction);
+}
+
 void OnHoldCallback() {
   if (actionState == Init)  return;
   if (actionState == Ready) return;
 
   if (millis() > onHoldButtonTime){
-    StartBuzzerLoop(2, 200, 50, 5);
-    Print_LCD("Stop Action","Reset System");
-    digitalWrite(relayPin, LOW);
-    relayOn = false;
-    actionState = Ready;
-    isCatchFail = false;
-    isFallDown  = false;
-    SendoutMoverData(idleAction);
+    RestartAction();
+    analogWrite(led_R_Pin, 255);
+    analogWrite(led_G_Pin, 255);
+    analogWrite(led_B_Pin, 255);
   }
 }
 
@@ -145,6 +155,8 @@ void setup()
   relayOn = false;
   isCatchFail = false;
   isFallDown  = false;
+
+  noItemLoop = 0;
   
   SetupFlowAction();
   InitAL5D();
@@ -153,6 +165,9 @@ void setup()
 
   actionState = Ready;
   Print_LCD("Put Button Start");
+  analogWrite(led_R_Pin, 255);
+  analogWrite(led_G_Pin, 255);
+  analogWrite(led_B_Pin, 255);
 }
 
 void loop()
@@ -223,7 +238,7 @@ void CheckPressure(){
 
   int sensorValue = analogRead(analogInPin);
   //Serial.print("sensor = ");
-  Serial.println(sensorValue);
+  //Serial.println(sensorValue);
 
   if (sensorValue < fallDownThreshold)
     inCatchCount++;
@@ -237,12 +252,17 @@ void CheckPressure(){
     Serial.print("inCatchCount : ");
     Serial.println(inCatchCount);
 
-    if (outCatchCount > inCatchCount)
+    if (outCatchCount > (inCatchCount * 2))
     {
       isFallDown = true;
       StartBuzzerLoop(2, 100, 50, 4);
       Print_LCD("Error", "Item Down Fail !");
+      analogWrite(led_R_Pin, 255);
+      analogWrite(led_G_Pin, 0);
+      analogWrite(led_B_Pin, 0);
     }
+    outCatchCount = 0;
+    inCatchCount = 0;
     nextCollectCatchTime = millis() + collectCatchTime;
   }
 }
@@ -252,9 +272,23 @@ void StartConveyor(){
   actionState = Start;
   isCatchFail = false;
   isFallDown  = false;
-  analogWrite(led_R_Pin, 0);
-  analogWrite(led_G_Pin, 255);
-  analogWrite(led_B_Pin, 0);
+
+  if (noItemLoop > 0){
+    analogWrite(led_R_Pin, 0);
+    analogWrite(led_G_Pin, 255);
+    analogWrite(led_B_Pin, 255);
+
+    if (noItemLoop > forcePasueCount){
+      analogWrite(led_R_Pin, 255);
+      analogWrite(led_G_Pin, 0);
+      analogWrite(led_B_Pin, 0);
+      RestartAction();
+    }
+  } else {
+    analogWrite(led_R_Pin, 0);
+    analogWrite(led_G_Pin, 255);
+    analogWrite(led_B_Pin, 0);
+  }
 }
 
 void StartCatchAction(){
@@ -266,6 +300,7 @@ void StartCatchAction(){
   isCatchFail = false;
   isFallDown  = false;
   actionState = StartCatch;
+  noItemLoop = 0;
   xTaskCreate(CatchAction, "CatchTask_1", 4096, NULL, 1, &CatchTask);
 }
 
@@ -274,6 +309,9 @@ void CatchFailAction(){
   isCatchFail = true;
 
   Print_LCD("Error", "Catch Fail !");
+  analogWrite(led_R_Pin, 255);
+  analogWrite(led_G_Pin, 0);
+  analogWrite(led_B_Pin, 0);
 
   //StartBuzzerLoop(2, 100, 50, 2);
   analogWrite(buzzerPin, 2);
@@ -298,5 +336,6 @@ void CheckConveyorTimeout(){
 void ConveyorTimeoutAction(){
   StartBuzzerLoop(2, 100, 50, 3);
   Print_LCD("Error !", "No Item !");
+  noItemLoop++;
   StartConveyor();
 }
