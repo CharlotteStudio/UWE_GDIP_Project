@@ -4,36 +4,48 @@
 #include "LCD1602_Header.h"
 #include <Wire.h> 
 
-//#define rxPin    0 // 低電壓
-//#define txPin    2 // 會出高電壓
-#define relayPin   3
-#define TrigPin    4
-#define EchoPin    5
-#define button_pin 7
-#define buzzerPin  9
-//#define sda_pin  15
-//#define scl_pin  16
+//#define rxPin     0 // 低電壓
+//#define txPin     2 // 會出高電壓
+#define analogInPin 1
+#define relayPin    3
+#define TrigPin     4
+#define EchoPin     5
+#define button_Pin  7
+#define buzzerPin   9
+#define led_R_Pin   11
+#define led_G_Pin   12
+#define led_B_Pin   13
+//#define sda_pin   15
+//#define scl_pin   16
 
-enum ActionState { Init, Ready, Start, Pause, Stop, StartCatch, Catched };
+enum ActionState { Init, Ready, Start, Pause, Stop, StartCatch, Catched, Release };
 ActionState actionState = Init;
 
 const int targetDistance = 5;
+const int fallDownThreshold = 3800; // empty is 4095, havve pressure is 2000~3000
 
 float nextCollectTime              = 0;
 const float collectTime            = 100;
+float nextCollectCatchTime         = 0;
+const float collectCatchTime       = 200;
 float conveyorTimeout              = 0;
 const float conveyorTimeoutWaiting = 10000;
 float onHoldButtonTime             = 0;
-const float onHoldButtonWaiting    = 5000;
+const float onHoldButtonWaiting    = 500;
 
 float cm;
 int inCount  = 0;
 int outCount = 0;
+int inCatchCount  = 0;
+int outCatchCount = 0;
 
 bool relayOn = false;
 bool isCatchFail = false;
+bool isFallDown  = false;
+bool checkingFallDown = false;
 
 bool IsItemReceived()   { return inCount > outCount; }
+bool IsItemFallDown()   { return outCatchCount > inCatchCount;}
 bool CanStartConveyor() { return actionState == Start; }
 bool IsCatchedItem()    { return actionState == Catched;}
 
@@ -59,6 +71,7 @@ void OnHoldCallback() {
     relayOn = false;
     actionState = Ready;
     isCatchFail = false;
+    isFallDown  = false;
     SendoutMoverData(idleAction);
   }
 }
@@ -83,12 +96,15 @@ void CatchAction(void* parameter)
   actionState = Catched;
   conveyorTimeout = 0;
   vTaskDelay(pdMS_TO_TICKS(1000));
+  nextCollectCatchTime = millis() + collectCatchTime;
 
   if (!isCatchFail){
     Print_LCD("Robotic Arm", "Move To Box 1");
     SendoutMoverData(release_1_Action_1);
     vTaskDelay(pdMS_TO_TICKS(2000));
   }
+
+  actionState = Release;
 
   if (!isCatchFail){
     SendoutMoverData(release_1_Action_2);
@@ -100,7 +116,7 @@ void CatchAction(void* parameter)
   vTaskDelay(pdMS_TO_TICKS(2000));
 
   // If Catach Fail the last idleAction will not rotation, need sendout idleAction again for reset
-  if (isCatchFail){
+  if (isCatchFail || isFallDown){
     SendoutMoverData(idleAction);
     vTaskDelay(pdMS_TO_TICKS(2000));
   }
@@ -115,7 +131,7 @@ void setup()
   pinMode(TrigPin, OUTPUT);
   pinMode(EchoPin, INPUT);
   pinMode(relayPin, OUTPUT);
-  pinMode(button_pin, INPUT_PULLUP);
+  pinMode(button_Pin, INPUT_PULLUP);
 
   digitalWrite(relayPin, LOW);
   SetUpOnUpCallback(0, &OnUpCallback);
@@ -128,6 +144,7 @@ void setup()
 
   relayOn = false;
   isCatchFail = false;
+  isFallDown  = false;
   
   SetupFlowAction();
   InitAL5D();
@@ -142,17 +159,19 @@ void loop()
 {
   delay(5);
 
-  if (actionState == Init)        return;
+  if (actionState == Init)                   return;
 
   CheckRelease();
   UpdateBuzzer();
-  CheckButtonOnClick(0, button_pin);
+  CheckButtonOnClick(0, button_Pin);
 
-  if (actionState == Ready)       return;
+  if (actionState == Ready)                  return;
 
   if (CanStartConveyor() || IsCatchedItem()) CheckUltrasound();
 
-  if (CanStartConveyor())         CheckConveyorTimeout();
+  if (IsCatchedItem())                       CheckPressure();
+
+  if (CanStartConveyor())                    CheckConveyorTimeout();
 }
 
 void CheckUltrasound(){
@@ -199,10 +218,43 @@ void CheckUltrasound(){
   }
 }
 
+void CheckPressure(){
+  if (isFallDown) return;
+
+  int sensorValue = analogRead(analogInPin);
+  //Serial.print("sensor = ");
+  Serial.println(sensorValue);
+
+  if (sensorValue < fallDownThreshold)
+    inCatchCount++;
+  else
+    outCatchCount++;
+
+  if (millis() > nextCollectCatchTime)
+  {
+    Serial.print("outCatchCount : ");
+    Serial.println(outCatchCount);
+    Serial.print("inCatchCount : ");
+    Serial.println(inCatchCount);
+
+    if (outCatchCount > inCatchCount)
+    {
+      isFallDown = true;
+      StartBuzzerLoop(2, 100, 50, 4);
+      Print_LCD("Error", "Item Down Fail !");
+    }
+    nextCollectCatchTime = millis() + collectCatchTime;
+  }
+}
+
 void StartConveyor(){
   conveyorTimeout = millis() + conveyorTimeoutWaiting;
   actionState = Start;
   isCatchFail = false;
+  isFallDown  = false;
+  analogWrite(led_R_Pin, 0);
+  analogWrite(led_G_Pin, 255);
+  analogWrite(led_B_Pin, 0);
 }
 
 void StartCatchAction(){
@@ -212,6 +264,7 @@ void StartCatchAction(){
   Print_LCD("Stop Conveyor", "Start Catching");
   relayOn = false;
   isCatchFail = false;
+  isFallDown  = false;
   actionState = StartCatch;
   xTaskCreate(CatchAction, "CatchTask_1", 4096, NULL, 1, &CatchTask);
 }
